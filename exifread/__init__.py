@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Read Exif metadata from tiff and jpeg files.
 """
@@ -180,13 +181,15 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
         return {}
 
     endian = chr(ord_(endian[0]))
-    # deal with the EXIF info we found
-    logger.debug("Endian format is %s (%s)", endian, {
-        'I': 'Intel',
-        'M': 'Motorola',
-        '\x01': 'Adobe Ducky',
-        'd': 'XMP/Adobe unknown'
-    }[endian])
+    try:
+        logger.debug("Endian format is %s (%s)", endian, {
+            'I': 'Intel',
+            'M': 'Motorola',
+            '\x01': 'Adobe Ducky',
+            'd': 'XMP/Adobe unknown'
+        }[endian])
+    except KeyError:
+        logger.debug("Unknown Endian format %s", endian.encode('unicode-escape'))
 
     hdr = ExifHeader(f, endian, offset, fake_exif, strict, debug, details)
     ifd_list = hdr.list_ifd()
@@ -258,5 +261,17 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
             logger.debug('XMP Finished searching for info')
         if xmp_string:
             hdr.parse_xmp(xmp_string)
+
+    google_coord = []
+    coord_keys = ['GPS GPSLatitude', 'GPS GPSLongitude']
+    if all(map(lambda k: k in hdr.tags, coord_keys)):
+        for k in coord_keys:
+            coord = hdr.tags.get(k)
+            if coord:
+                coord = coord.values
+                google_coord.append("%s°%s\'%s\"%s" % (
+                    coord[0], coord[1], coord[2].num/coord[2].den, hdr.tags.get(k + "Ref")))
+
+        hdr.tags['GPS GoogleGPScoordinates'] = " ".join(google_coord)
 
     return hdr.tags
